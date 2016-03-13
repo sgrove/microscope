@@ -3,13 +3,13 @@ module Html = Dom_html
 let react =
   Js.Unsafe.variable "React"
 
-type user_id = int
+type user_id = int [@@deriving yojson]
 
-type post_id = int
+type post_id = int [@@deriving yojson]
 
-type comment_id = int
+type comment_id = int [@@deriving yojson]
 
-type date = int
+type date = int [@@deriving yojson]
 
 type user =
     {
@@ -27,7 +27,7 @@ type post =
       body: string;
       user_id: user_id;
       created_at: date;
-    }
+    } [@@deriving yojson]
 
 type comment =
     {
@@ -105,6 +105,7 @@ let to_obj l = Js.Unsafe.obj @@ Array.of_list l
 let jss s = Js.string s
 let inj o = Js.Unsafe.inject o
 let ins s = inj @@ jss s
+let ino s = inj @@ jss s
 
 
 let console =
@@ -112,6 +113,19 @@ let console =
 
 let log msg = 
   Js.Unsafe.meth_call console "log" [| inj @@ msg |]
+
+let () =
+  ignore (log @@ jss "Creating a post...");
+  let json = post_to_yojson a_post in
+  let json_s = Yojson.Safe.to_string json in
+  let parsed_json = Yojson.Safe.from_string json_s in
+  let post_from_json = match post_of_yojson parsed_json with
+    | `Error err_str -> raise Not_found
+    | `Ok post -> post
+ in
+  ignore (log @@ jss @@ json_s);
+  log @@ jss @@ "Post roundtrip title: " ^ post_from_json.title
+
 
 (* TODO: Handle decodeURIComponent, etc. - see https://ocsigen.org/js_of_ocaml/api/Js#2_StandardJavascriptfunctions *)
 let page_params =
@@ -276,7 +290,6 @@ let start _:(bool Js.t) =
   React.render container entry_div;
   Printf.printf "Finished initial rendering\n";
   Js._false
-
 
 let () =
   let my_obj = object%js (self)
