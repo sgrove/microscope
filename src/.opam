@@ -1,0 +1,37 @@
+opam-version: "1.2"
+maintainer:   "sean@bushi.do"
+authors:      ["Daniel Woelfel" "Sean Grove"]
+license:      "ISC"
+homepage:     "https://github.com/sgrove/microscope"
+bug-reports:  "https://github.com/sgrove/microscope/issues"
+dev-repo:     "https://github.com/sgrove/microscope.git"
+
+build: [
+  ["./configure" "--prefix" prefix
+      "--%{cohttp:enable}%-http"
+      "--%{git:enable}%-git"
+      "--%{base-unix+git-unix:enable}%-unix"
+      "--%{mirage-git:enable}%-mirage"]
+  [make]
+]
+build-test: [
+  ["./configure" "--enable-tests" "--enable-examples"]
+  [make "test"]
+]
+
+install: [make "install"]
+
+remove: ["ocamlfind" "remove" "microscope"]
+
+depends: [
+  "ocamlfind" {build}
+  "irmin" {>= "0.10.1"}
+  "irmin-unix" {>= "0.9.9"}
+  "lwt" {>= "2.5.1"}
+  "yojson"
+]
+depopts: [
+]
+conflicts: [
+]
+available: []
