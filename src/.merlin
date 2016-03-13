@@ -1,0 +1,5 @@
+B _build/**
+
+PKG lwt cohttp aws aws_ec2 aws.lwt opium js_of_ocaml
+SRC src/
+EXT js

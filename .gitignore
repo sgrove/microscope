@@ -1,0 +1,8 @@
+.DS_Store
+_build/
+log
+*.cm*
+*.byte
+main.native
+resources/public/js/client.js
+resources/public/js/client.map
