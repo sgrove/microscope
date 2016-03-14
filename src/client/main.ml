@@ -1,5 +1,6 @@
 module Html = Dom_html
 
+
 let react =
   Js.Unsafe.variable "React"
 
@@ -37,6 +38,7 @@ type comment =
       post_id: post_id;
       created_at: date;
     }
+
 
 let a_user =
   { id = 1;
