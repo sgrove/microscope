@@ -303,3 +303,36 @@ let () =
   Js.Unsafe.set Html.window "my_obj" my_obj;
   Printf.printf "value: %s\n" my_obj##.name;
   Js.Unsafe.set Html.window "onload" (Dom.handler start)
+
+module Store =
+  Irmin_mem.Make (Irmin.Contents.String)(Irmin.Ref.String)(Irmin.Hash.SHA1)
+
+module View =
+  Irmin.View (Store)
+
+let config =
+  Irmin_mem.config ()
+
+let prog () =
+  let open Lwt.Infix in
+  let date = Int64.of_int 0 in
+  let author = "Sean Grove" in
+  Printf.printf "Author/Date: %s %d\n%!" author (Int64.to_int date);
+  Store.Repo.create config >>= fun x ->
+  Printf.printf "Repo created... \n%!";
+  Store.master (Irmin.Task.create ~date ~owner:author) x >>= fun t ->
+  Printf.printf "Task created... \n%!";
+  Store.update (t "Updating foo/bar")  ["foo"; "bar"] "hi!" >>= fun () ->
+  Store.update (t "Updating foo/baz")  ["foo"; "baz"] "there!" >>= fun () ->
+  Store.update (t "Updating foo/bub")  ["foo"; "bub"] "OCaml!" >>= fun () ->
+  Printf.printf "Irmin updated... \n%!";
+  Store.read_exn (t "Reading foo/bar") ["foo"; "bar"] >>= fun x ->
+  Printf.printf "Read: %s\n%!" x;
+  Printf.printf "Created a view.. \n";
+  (* Trying to get a view into  *)
+  (* t2s is always [] here, why?  *)
+  Printf.printf "finished!\n";
+  Lwt.return_unit
+
+let () =
+  Lwt.async prog
