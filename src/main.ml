@@ -1,14 +1,27 @@
 open Lwt.Infix
 module Opi = Opium.Std
 open Opium.Std
+module Websocket = Websocket_lwt
 
-type user_id = int
+let section = Lwt_log.Section.make "microscope"
+let setup_logging () =
+  let open Lwt_log in
+  default := channel
+               ~close_mode:`Keep
+               ~channel:Lwt_io.stderr
+               ~template:"$(name): $(message)"
+               ();
+  Section.set_level section Debug
 
-type post_id = int
+let infof = Lwt_log.ign_info_f ~section
 
-type comment_id = int
+type user_id = int [@@deriving yojson]
 
-type date = int
+type post_id = int [@@deriving yojson]
+
+type comment_id = int [@@deriving yojson]
+
+type date = int [@@deriving yojson]
 
 type user =
     {
@@ -17,7 +30,7 @@ type user =
       email: string;
       password: string;
       created_at: date;
-    }
+    } [@@deriving yojson]
 
 type post =
     {
@@ -26,7 +39,7 @@ type post =
       body: string;
       user_id: user_id;
       created_at: date;
-    }
+    } [@@deriving yojson]
 
 type comment =
     {
@@ -35,7 +48,7 @@ type comment =
       user_id: user_id;
       post_id: post_id;
       created_at: date;
-    }
+    } [@@deriving yojson]
 
 let a_user =
   { id = 1;
@@ -89,7 +102,78 @@ let () =
 type person = {
   name: string;
   age: int;
-}
+} [@@deriving yojson]
+
+let ws_connections = Hashtbl.create 17
+
+type ws_opt = string [@@deriving yojson] 
+
+type ws_data =
+    {
+      posts: post list;
+    } [@@deriving yojson]
+
+type ws_message =
+    {
+      op: ws_opt;
+      data: ws_data;
+    } [@@deriving yojson]
+
+let ws_handler id req recv send =
+  (try
+      Hashtbl.find ws_connections id
+    with Not_found ->
+      Hashtbl.add ws_connections id ();
+      infof "New websocket connection (id=%d)" id;
+      Lwt.async(fun () ->
+                let msg = {
+                  op = "initial_data";
+                  data = {
+                    posts = a_posts;
+                  };
+                } in
+                send @@ Websocket.Frame.create ~content:(Yojson.Safe.to_string (ws_message_to_yojson msg)) ()
+               )
+  );
+  let rec recv_forever () =
+    let open Websocket.Frame in
+    let react fr =
+      Lwt_log.debug_f ~section "<- %s" (Websocket.Frame.show fr) >>= fun () ->
+      match fr.opcode with
+      | Opcode.Ping ->
+         send @@ Websocket.Frame.create ~opcode:Opcode.Pong ~content:fr.content ()
+
+      | Opcode.Close ->
+         Lwt_log.info_f ~section "Client %d sent a close frame" id >>= fun () ->
+         (* Immediately echo and pass this last message to the user *)
+         (if String.length fr.content >= 2 then
+            send @@ Websocket.Frame.create ~opcode:Opcode.Close
+                                           ~content:(String.sub fr.content 0 2) ()
+          else send @@ Websocket.Frame.close 1000) >>= fun () ->
+         Lwt.fail Exit
+
+      | Opcode.Pong -> Lwt.return_unit
+
+      | Opcode.Text
+      | Opcode.Binary -> send @@ Websocket.Frame.create ~content:fr.content ()
+
+      | _ ->
+         send @@ Websocket.Frame.close 1002 >>= fun () ->
+         Lwt.fail Exit
+    in
+    recv () >>= react >>= recv_forever
+  in
+  try%lwt
+        recv_forever ()
+  with exn ->
+    Lwt_log.info_f ~section "Connection to client %d lost" id >>= fun () ->
+    Hashtbl.remove ws_connections id;
+    Lwt.fail exn
+
+let main uri () =
+  Resolver_lwt.resolve_uri ~uri Resolver_lwt_unix.system >>= fun endp ->
+  Conduit_lwt_unix.(endp_to_server ~ctx:default_ctx endp >>= fun server ->
+                    Websocket.establish_server ~ctx:default_ctx ~mode:server ws_handler)
 
 let json_of_post { id ; title ; body ; user_id ; created_at } =
   let open Ezjsonm in
@@ -105,8 +189,8 @@ let html_of_post { id ; title ; body ; user_id ; created_at } =
   Printf.sprintf "<div><h1>%s <small>- by %s</small></h1><p>%s</p>" title user.username body
 
 let print_param = put "/hello/:name" begin fun req ->
-  `String ("Hello " ^ param req "name") |> respond'
-end
+                                           `String ("Hello " ^ param req "name") |> respond'
+                                     end
 
 let get_post = 
   get "/posts/:post_id" begin 
@@ -126,9 +210,23 @@ let get_index =
       end
 
 let _ =
+  setup_logging ();
+
+  infof "starting websocket server";
+
+  let port = ref 3000 in
+  let ws_port = !port + 1 in
+  let address = ref "localhost" in
+  let ws_uri = Printf.sprintf "http://%s:%d" !address ws_port in
+
+  Lwt.async @@ main @@ Uri.of_string ws_uri;
+
+  infof "starting http server";
+
   let static =
     Middleware.static ~local_path:"./resources/public" ~uri_prefix:"/" in
   App.empty
+  |> App.port !port
   |> print_param
   |> get_post
   |> get_index
