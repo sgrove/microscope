@@ -1,7 +1,9 @@
 B _build/**
 
 PKG lwt cohttp aws aws_ec2 aws.lwt opium js_of_ocaml js_of_ocaml.ppx
+PKG websocket.lwt lwt.ppx
 PKG yojson ppx_deriving_yojson
 PKG irmin irmin-unix irmin-indexeddb
+
 SRC src/
 EXT js
