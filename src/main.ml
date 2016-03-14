@@ -108,8 +108,8 @@ let print_param = put "/hello/:name" begin fun req ->
   `String ("Hello " ^ param req "name") |> respond'
 end
 
-let get_post = 
-  get "/posts/:post_id" begin 
+let get_post =
+  get "/posts/:post_id" begin
         fun req ->
         try
           let post_id = "post_id" |> param req |> int_of_string in
